@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FleetDesk – Corporate Transport</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🚘</text></svg>" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #0F172A; color: #E2E8F0; font-family: 'DM Sans', sans-serif; }
+    input, select, textarea { font-family: 'DM Sans', sans-serif; }
+    @keyframes slideIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
+    .fade-up { animation: fadeUp 0.4s ease forwards; }
+    ::-webkit-scrollbar { width: 6px; } 
+    ::-webkit-scrollbar-track { background: #1E293B; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useState } = React;
+
+    const RIDE_TYPES = [
+      { id: "airport", label: "Airport Transfer", icon: "✈️", color: "#3B82F6" },
+      { id: "medical", label: "Medical Visit", icon: "🏥", color: "#EF4444" },
+      { id: "meeting", label: "Business Meeting", icon: "💼", color: "#8B5CF6" },
+      { id: "courier", label: "Shipment / Courier", icon: "📦", color: "#F59E0B" },
+      { id: "hotel", label: "Hotel Transfer", icon: "🏨", color: "#10B981" },
+      { id: "personal", label: "Personal Errand", icon: "🚗", color: "#6B7280" },
+    ];
+
+    const DRIVERS = [
+      { id: 1, name: "Khalid Al-Rashidi", vehicle: "Toyota Camry · White", plate: "KSA-1234", available: true, avatar: "KA" },
+      { id: 2, name: "Mohammed Al-Zahrani", vehicle: "Hyundai Sonata · Black", plate: "KSA-5678", available: true, avatar: "MZ" },
+      { id: 3, name: "Abdullah Faris", vehicle: "Kia Optima · Silver", plate: "KSA-9012", available: false, avatar: "AF" },
+      { id: 4, name: "Sami Al-Otaibi", vehicle: "Toyota Corolla · Grey", plate: "KSA-3456", available: true, avatar: "SO" },
+    ];
+
+    const STATUS_CONFIG = {
+      pending:    { label: "Pending",     bg: "#FEF3C7", color: "#92400E", dot: "#F59E0B" },
+      assigned:   { label: "Assigned",    bg: "#D1FAE5", color: "#065F46", dot: "#10B981" },
+      inprogress: { label: "In Progress", bg: "#DBEAFE", color: "#1E40AF", dot: "#3B82F6" },
+      completed:  { label: "Completed",   bg: "#F3F4F6", color: "#374151", dot: "#9CA3AF" },
+    };
+
+    const INITIAL_REQUESTS = [
+      { id: "RQ-001", employee: "Fatima Al-Harbi", department: "Finance", type: "airport", pickup: "Head Office, Jeddah", destination: "King Abdulaziz International Airport", date: "2026-03-11", time: "06:00", notes: "Flight at 09:00, needs to be there early", status: "assigned", driver: 1, submittedAt: "2026-03-10T08:30:00", passengers: 1 },
+      { id: "RQ-002", employee: "Omar Al-Shehri", department: "HR", type: "medical", pickup: "Tower B, Company Compound", destination: "Dr. Sulaiman Al Habib Hospital", date: "2026-03-10", time: "14:30", notes: "Routine checkup, return trip needed", status: "pending", driver: null, submittedAt: "2026-03-10T10:15:00", passengers: 1 },
+    ];
+
+    function generateId() { return `RQ-${Math.floor(Math.random() * 900) + 100}`; }
+    function timeAgo(iso) {
+      const diff = (Date.now() - new Date(iso)) / 1000;
+      if (diff < 60) return "just now";
+      if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+      return `${Math.floor(diff / 3600)}h ago`;
+    }
+
+    const inputStyle = {
+      width: "100%", padding: "11px 14px", borderRadius: 10, border: "1px solid #334155",
+      background: "#0F172A", color: "#E2E8F0", fontSize: 14, outline: "none", boxSizing: "border-box"
+    };
+
+    function Field({ label, value, onChange, placeholder, type = "text" }) {
+      return (
+        <div>
+          <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", letterSpacing: "0.5px", textTransform: "uppercase", display: "block", marginBottom: 8 }}>{label}</label>
+          <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder} style={inputStyle} />
+        </div>
+      );
+    }
+
+    function SectionLabel({ children }) {
+      return <div style={{ fontSize: 11, fontWeight: 700, color: "#64748B", letterSpacing: "0.8px", textTransform: "uppercase", marginBottom: 12 }}>{children}</div>;
+    }
+
+    function Card({ children, style = {} }) {
+      return <div style={{ background: "#1E293B", borderRadius: 18, padding: 28, border: "1px solid #334155", ...style }}>{children}</div>;
+    }
+
+    function App() {
+      const [view, setView] = useState("employee");
+      const [requests, setRequests] = useState(INITIAL_REQUESTS);
+      const [submitted, setSubmitted] = useState(false);
+      const [newReqId, setNewReqId] = useState(null);
+      const [selectedReq, setSelectedReq] = useState(null);
+      const [filterStatus, setFilterStatus] = useState("all");
+      const [notification, setNotification] = useState(null);
+      const [aiSuggestion, setAiSuggestion] = useState(null);
+      const [aiLoading, setAiLoading] = useState(false);
+      const [form, setForm] = useState({ employee: "", department: "", type: "", pickup: "", destination: "", date: "", time: "", passengers: "1", notes: "" });
+
+      const showNotification = (msg, type = "success") => {
+        setNotification({ msg, type });
+        setTimeout(() => setNotification(null), 3500);
+      };
+
+      const handleSubmit = () => {
+        if (!form.employee || !form.type || !form.pickup || !form.destination || !form.date || !form.time) {
+          showNotification("Please fill all required fields.", "error"); return;
+        }
+        const id = generateId();
+        setRequests(prev => [{ id, ...form, passengers: parseInt(form.passengers), status: "pending", driver: null, submittedAt: new Date().toISOString() }, ...prev]);
+        setNewReqId(id); setSubmitted(true);
+      };
+
+      const handleReset = () => {
+        setForm({ employee: "", department: "", type: "", pickup: "", destination: "", date: "", time: "", passengers: "1", notes: "" });
+        setSubmitted(false); setNewReqId(null);
+      };
+
+      const handleAssign = (reqId, driverId) => {
+        setRequests(prev => prev.map(r => r.id === reqId ? { ...r, driver: driverId, status: driverId ? "assigned" : "pending" } : r));
+        const driver = DRIVERS.find(d => d.id === driverId);
+        showNotification(driver ? `Assigned to ${driver.name}` : "Driver unassigned");
+        setSelectedReq(null);
+      };
+
+      const handleStatusChange = (reqId, status) => {
+        setRequests(prev => prev.map(r => r.id === reqId ? { ...r, status } : r));
+      };
+
+      const getAiSuggestion = async (req) => {
+        setAiLoading(true); setAiSuggestion(null);
+        try {
+          const res = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-20250514", max_tokens: 300,
+              messages: [{ role: "user", content: `Fleet coordinator: suggest best driver for this ride.\nEmployee: ${req.employee} (${req.department})\nType: ${req.type}\nFrom: ${req.pickup}\nTo: ${req.destination}\nDate/Time: ${req.date} at ${req.time}\nPassengers: ${req.passengers}\nNotes: ${req.notes || "none"}\nAvailable drivers: ${DRIVERS.filter(d => d.available).map(d => d.name).join(", ")}\n\nRecommend one driver by name in 2-3 short sentences.` }]
+            })
+          });
+          const data = await res.json();
+          setAiSuggestion(data.content?.[0]?.text || "No suggestion available.");
+        } catch { setAiSuggestion("Could not fetch AI suggestion."); }
+        setAiLoading(false);
+      };
+
+      const filteredRequests = filterStatus === "all" ? requests : requests.filter(r => r.status === filterStatus);
+      const stats = { total: requests.length, pending: requests.filter(r => r.status === "pending").length, assigned: requests.filter(r => r.status === "assigned").length, inprogress: requests.filter(r => r.status === "inprogress").length };
+
+      return (
+        <div style={{ fontFamily: "'DM Sans', sans-serif", minHeight: "100vh", background: "#0F172A", color: "#E2E8F0" }}>
+          {notification && (
+            <div style={{ position: "fixed", top: 20, right: 20, zIndex: 9999, background: notification.type === "error" ? "#EF4444" : "#10B981", color: "white", padding: "12px 20px", borderRadius: 10, fontSize: 14, fontWeight: 500, boxShadow: "0 8px 32px rgba(0,0,0,0.3)", animation: "slideIn 0.3s ease" }}>
+              {notification.type === "error" ? "⚠️" : "✓"} {notification.msg}
+            </div>
+          )}
+
+          {/* Header */}
+          <div style={{ borderBottom: "1px solid #1E293B", background: "#0F172A", position: "sticky", top: 0, zIndex: 100 }}>
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "0 24px", display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18 }}>🚘</div>
+                <div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: "#F8FAFC", letterSpacing: "-0.3px" }}>FleetDesk</div>
+                  <div style={{ fontSize: 11, color: "#64748B", letterSpacing: "0.5px", textTransform: "uppercase" }}>Corporate Transport</div>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 4, background: "#1E293B", borderRadius: 10, padding: 4 }}>
+                {[["employee", "👤 Request Ride"], ["admin", "🛡️ Admin Dashboard"]].map(([v, label]) => (
+                  <button key={v} onClick={() => setView(v)} style={{ padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: view === v ? "#3B82F6" : "transparent", color: view === v ? "white" : "#94A3B8", transition: "all 0.2s" }}>{label}</button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* EMPLOYEE VIEW */}
+          {view === "employee" && (
+            <div style={{ maxWidth: 680, margin: "0 auto", padding: "40px 24px" }}>
+              {!submitted ? (
+                <>
+                  <div style={{ marginBottom: 32 }}>
+                    <h1 style={{ fontSize: 28, fontWeight: 700, color: "#F8FAFC", margin: 0 }}>Request a Ride</h1>
+                    <p style={{ color: "#64748B", marginTop: 6, fontSize: 15 }}>Fill out the form and our transport team will assign a driver.</p>
+                  </div>
+                  <Card>
+                    <SectionLabel>Your Information</SectionLabel>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 24 }}>
+                      <Field label="Full Name *" value={form.employee} onChange={v => setForm({...form, employee: v})} placeholder="e.g. Ahmed Al-Sayed" />
+                      <Field label="Department" value={form.department} onChange={v => setForm({...form, department: v})} placeholder="e.g. Finance" />
+                    </div>
+                    <SectionLabel>Ride Type *</SectionLabel>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 24 }}>
+                      {RIDE_TYPES.map(rt => (
+                        <button key={rt.id} onClick={() => setForm({...form, type: rt.id})} style={{ padding: "14px 10px", borderRadius: 10, border: `2px solid ${form.type === rt.id ? rt.color : "#1E293B"}`, background: form.type === rt.id ? `${rt.color}18` : "#1E293B", cursor: "pointer", transition: "all 0.2s", textAlign: "center" }}>
+                          <div style={{ fontSize: 22, marginBottom: 4 }}>{rt.icon}</div>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: form.type === rt.id ? rt.color : "#94A3B8" }}>{rt.label}</div>
+                        </button>
+                      ))}
+                    </div>
+                    <SectionLabel>Route Details</SectionLabel>
+                    <div style={{ marginBottom: 16 }}>
+                      <Field label="Pickup Location *" value={form.pickup} onChange={v => setForm({...form, pickup: v})} placeholder="Building / Address" />
+                    </div>
+                    <div style={{ marginBottom: 24 }}>
+                      <Field label="Destination *" value={form.destination} onChange={v => setForm({...form, destination: v})} placeholder="Hospital / Airport / Office..." />
+                    </div>
+                    <SectionLabel>Schedule</SectionLabel>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 16, marginBottom: 24 }}>
+                      <Field label="Date *" type="date" value={form.date} onChange={v => setForm({...form, date: v})} />
+                      <Field label="Time *" type="time" value={form.time} onChange={v => setForm({...form, time: v})} />
+                      <div>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: "#64748B", letterSpacing: "0.5px", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Passengers</label>
+                        <select value={form.passengers} onChange={e => setForm({...form, passengers: e.target.value})} style={inputStyle}>
+                          {[1,2,3,4,5].map(n => <option key={n} value={n}>{n}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <SectionLabel>Additional Notes</SectionLabel>
+                    <textarea value={form.notes} onChange={e => setForm({...form, notes: e.target.value})} placeholder="Special requirements, return trip needed, luggage..." rows={3} style={{ ...inputStyle, resize: "vertical", marginBottom: 28 }} />
+                    <button onClick={handleSubmit} style={{ width: "100%", padding: 16, borderRadius: 12, border: "none", cursor: "pointer", background: "linear-gradient(135deg, #3B82F6, #8B5CF6)", color: "white", fontSize: 15, fontWeight: 700, boxShadow: "0 4px 24px rgba(59,130,246,0.4)" }}>
+                      Submit Ride Request →
+                    </button>
+                  </Card>
+                </>
+              ) : (
+                <Card style={{ textAlign: "center", padding: "60px 40px" }}>
+                  <div style={{ fontSize: 64, marginBottom: 16 }}>✅</div>
+                  <h2 style={{ fontSize: 24, fontWeight: 700, color: "#F8FAFC", margin: "0 0 8px" }}>Request Submitted!</h2>
+                  <p style={{ color: "#64748B", marginBottom: 8 }}>Your request ID is</p>
+                  <div style={{ display: "inline-block", background: "#1E293B", padding: "10px 24px", borderRadius: 10, fontFamily: "monospace", fontSize: 20, fontWeight: 600, color: "#3B82F6", marginBottom: 24 }}>{newReqId}</div>
+                  <p style={{ color: "#64748B", fontSize: 14, marginBottom: 32 }}>Our transport administrator will assign a driver shortly.</p>
+                  <button onClick={handleReset} style={{ padding: "12px 28px", borderRadius: 10, border: "2px solid #3B82F6", background: "transparent", color: "#3B82F6", fontSize: 14, fontWeight: 600, cursor: "pointer" }}>Submit Another Request</button>
+                </Card>
+              )}
+            </div>
+          )}
+
+          {/* ADMIN VIEW */}
+          {view === "admin" && (
+            <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px" }}>
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, flexWrap: "wrap", gap: 16 }}>
+                <div>
+                  <h1 style={{ fontSize: 26, fontWeight: 700, color: "#F8FAFC", margin: 0 }}>Transport Dashboard</h1>
+                  <p style={{ color: "#64748B", marginTop: 4, fontSize: 14 }}>Live ride requests — assign drivers and manage fleet</p>
+                </div>
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {Object.entries({ all: "All", pending: "Pending", assigned: "Assigned", inprogress: "In Progress" }).map(([k, label]) => (
+                    <button key={k} onClick={() => setFilterStatus(k)} style={{ padding: "8px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontSize: 13, fontWeight: 600, background: filterStatus === k ? "#3B82F6" : "#1E293B", color: filterStatus === k ? "white" : "#64748B" }}>
+                      {label}{k !== "all" && stats[k] > 0 && <span style={{ marginLeft: 6, background: filterStatus === k ? "rgba(255,255,255,0.3)" : "#334155", borderRadius: 20, padding: "1px 7px", fontSize: 11 }}>{stats[k]}</span>}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 16, marginBottom: 28 }}>
+                {[{ label: "Total Requests", value: stats.total, icon: "📋", color: "#3B82F6" }, { label: "Pending", value: stats.pending, icon: "⏳", color: "#F59E0B" }, { label: "Assigned", value: stats.assigned, icon: "✅", color: "#10B981" }, { label: "In Progress", value: stats.inprogress, icon: "🚗", color: "#8B5CF6" }].map(s => (
+                  <div key={s.label} style={{ background: "#1E293B", borderRadius: 14, padding: "20px 22px", border: "1px solid #334155" }}>
+                    <div style={{ fontSize: 24, marginBottom: 8 }}>{s.icon}</div>
+                    <div style={{ fontSize: 28, fontWeight: 700, color: s.color }}>{s.value}</div>
+                    <div style={{ fontSize: 12, color: "#64748B", fontWeight: 500, marginTop: 2 }}>{s.label}</div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ background: "#1E293B", borderRadius: 14, padding: "18px 22px", marginBottom: 24, border: "1px solid #334155" }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: "#64748B", letterSpacing: "0.5px", textTransform: "uppercase", marginBottom: 14 }}>Driver Availability</div>
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  {DRIVERS.map(d => (
+                    <div key={d.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#0F172A", borderRadius: 10, padding: "10px 14px", border: `1px solid ${d.available ? "#1F4032" : "#2D1515"}` }}>
+                      <div style={{ width: 32, height: 32, borderRadius: "50%", background: d.available ? "#065F46" : "#450A0A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: d.available ? "#10B981" : "#EF4444" }}>{d.avatar}</div>
+                      <div>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: "#E2E8F0" }}>{d.name}</div>
+                        <div style={{ fontSize: 11, color: d.available ? "#10B981" : "#EF4444" }}>{d.available ? "● Available" : "● Busy"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {filteredRequests.length === 0 && <div style={{ textAlign: "center", padding: "60px 20px", color: "#475569" }}>No requests match this filter.</div>}
+                {filteredRequests.map(req => {
+                  const rtype = RIDE_TYPES.find(r => r.id === req.type);
+                  const driver = DRIVERS.find(d => d.id === req.driver);
+                  const sc = STATUS_CONFIG[req.status];
+                  return (
+                    <div key={req.id} style={{ background: "#1E293B", borderRadius: 14, padding: "20px 22px", border: "1px solid #334155" }}>
+                      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                        <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+                          <div style={{ width: 44, height: 44, borderRadius: 12, background: `${rtype?.color}18`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, flexShrink: 0 }}>{rtype?.icon}</div>
+                          <div>
+                            <div style={{ display: "flex", gap: 10, alignItems: "center", marginBottom: 4, flexWrap: "wrap" }}>
+                              <span style={{ fontFamily: "monospace", fontSize: 12, color: "#64748B" }}>{req.id}</span>
+                              <span style={{ fontSize: 13, fontWeight: 700, color: "#F8FAFC" }}>{req.employee}</span>
+                              {req.department && <span style={{ fontSize: 11, color: "#64748B", background: "#0F172A", padding: "2px 8px", borderRadius: 6 }}>{req.department}</span>}
+                              <span style={{ fontSize: 11, background: sc.bg, color: sc.color, padding: "3px 10px", borderRadius: 20, fontWeight: 600 }}>
+                                <span style={{ display: "inline-block", width: 6, height: 6, borderRadius: "50%", background: sc.dot, marginRight: 5 }}></span>{sc.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 13, color: "#94A3B8", marginBottom: 4 }}>
+                              <span style={{ color: "#64748B" }}>From: </span>{req.pickup}<span style={{ margin: "0 8px", color: "#334155" }}>→</span><span style={{ color: "#64748B" }}>To: </span>{req.destination}
+                            </div>
+                            <div style={{ fontSize: 12, color: "#64748B", display: "flex", gap: 16, flexWrap: "wrap" }}>
+                              <span>📅 {req.date} at {req.time}</span>
+                              <span>👥 {req.passengers} passenger{req.passengers > 1 ? "s" : ""}</span>
+                              {driver && <span style={{ color: "#10B981" }}>🚘 {driver.name}</span>}
+                              <span style={{ color: "#475569" }}>{timeAgo(req.submittedAt)}</span>
+                            </div>
+                            {req.notes && <div style={{ marginTop: 6, fontSize: 12, color: "#64748B", fontStyle: "italic" }}>"{req.notes}"</div>}
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                          <select value={req.status} onChange={e => handleStatusChange(req.id, e.target.value)} style={{ ...inputStyle, fontSize: 12, padding: "7px 12px", width: "auto", cursor: "pointer" }}>
+                            <option value="pending">Pending</option>
+                            <option value="assigned">Assigned</option>
+                            <option value="inprogress">In Progress</option>
+                            <option value="completed">Completed</option>
+                          </select>
+                          <button onClick={() => { setSelectedReq(req); setAiSuggestion(null); }} style={{ padding: "8px 16px", borderRadius: 8, border: "none", cursor: "pointer", background: "#3B82F6", color: "white", fontSize: 12, fontWeight: 600 }}>Assign Driver</button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Modal */}
+          {selectedReq && (
+            <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.7)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }} onClick={() => setSelectedReq(null)}>
+              <div style={{ background: "#1E293B", borderRadius: 18, padding: 28, maxWidth: 520, width: "100%", border: "1px solid #334155" }} onClick={e => e.stopPropagation()}>
+                <div style={{ fontSize: 18, fontWeight: 700, color: "#F8FAFC", marginBottom: 6 }}>Assign Driver</div>
+                <div style={{ fontSize: 13, color: "#64748B", marginBottom: 20 }}>{selectedReq.id} · {selectedReq.employee} · {RIDE_TYPES.find(r => r.id === selectedReq.type)?.label}</div>
+                <button onClick={() => getAiSuggestion(selectedReq)} style={{ width: "100%", padding: 11, borderRadius: 10, border: "1px dashed #4F46E5", background: "#1E1B4B", color: "#818CF8", fontSize: 13, fontWeight: 600, cursor: "pointer", marginBottom: 14 }}>
+                  {aiLoading ? "⏳ Getting AI Suggestion..." : "✨ Get AI Driver Suggestion"}
+                </button>
+                {aiSuggestion && (
+                  <div style={{ background: "#0F172A", border: "1px solid #312E81", borderRadius: 10, padding: "14px 16px", marginBottom: 18, fontSize: 13, color: "#C7D2FE", lineHeight: 1.6 }}>
+                    <span style={{ color: "#818CF8", fontWeight: 700 }}>AI Recommendation: </span>{aiSuggestion}
+                  </div>
+                )}
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {DRIVERS.map(d => (
+                    <button key={d.id} onClick={() => d.available && handleAssign(selectedReq.id, d.id)} style={{ display: "flex", alignItems: "center", gap: 14, padding: "14px 16px", borderRadius: 12, border: `2px solid ${selectedReq.driver === d.id ? "#3B82F6" : d.available ? "#334155" : "#1E293B"}`, background: selectedReq.driver === d.id ? "#1E3A5F" : "#0F172A", cursor: d.available ? "pointer" : "not-allowed", opacity: d.available ? 1 : 0.5, textAlign: "left" }}>
+                      <div style={{ width: 40, height: 40, borderRadius: "50%", background: d.available ? "#065F46" : "#450A0A", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: d.available ? "#10B981" : "#EF4444" }}>{d.avatar}</div>
+                      <div>
+                        <div style={{ fontSize: 14, fontWeight: 600, color: "#F8FAFC" }}>{d.name}</div>
+                        <div style={{ fontSize: 12, color: "#64748B" }}>{d.vehicle} · {d.plate}</div>
+                        <div style={{ fontSize: 11, color: d.available ? "#10B981" : "#EF4444", marginTop: 2 }}>{d.available ? "● Available" : "● Currently busy"}</div>
+                      </div>
+                      {selectedReq.driver === d.id && <span style={{ marginLeft: "auto", fontSize: 18 }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+                <button onClick={() => setSelectedReq(null)} style={{ marginTop: 16, width: "100%", padding: 12, borderRadius: 10, border: "1px solid #334155", background: "transparent", color: "#64748B", fontSize: 13, cursor: "pointer" }}>Cancel</button>
+              </div>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>
